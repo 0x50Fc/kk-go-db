@@ -135,7 +135,7 @@ func DBBuild(db *sql.DB, table *DBTable, prefix string, auto_increment int) erro
 			var _, ok = tb.Indexs[name]
 			if !ok {
 				if index.Unique {
-					_, err = db.Exec(fmt.Sprintf("CREATE UNIQUE IF NOT EXISTS  %s ON %s (%s %s);", name, tbname, name, index.DBType()))
+					_, err = db.Exec(fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS  %s ON %s (%s %s);", name, tbname, name, index.DBType()))
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -184,9 +184,9 @@ func DBBuild(db *sql.DB, table *DBTable, prefix string, auto_increment int) erro
 		for name, index := range table.Indexs {
 
 			if index.Unique {
-				db.Exec(fmt.Sprintf(",UNIQUE %s (%s %s);", name, name, index.DBType()))
+				s.WriteString(fmt.Sprintf(",UNIQUE INDEX %s (%s %s)", name, name, index.DBType()))
 			} else {
-				db.Exec(fmt.Sprintf(",INDEX %s (%s %s);", name, name, index.DBType()))
+				s.WriteString(fmt.Sprintf(",INDEX %s (%s %s)", name, name, index.DBType()))
 			}
 
 		}
@@ -196,6 +196,8 @@ func DBBuild(db *sql.DB, table *DBTable, prefix string, auto_increment int) erro
 		} else {
 			s.WriteString(" ) ;")
 		}
+
+		log.Println(s.String())
 
 		_, err = db.Exec(s.String())
 		if err != nil {
@@ -213,6 +215,15 @@ func DBBuild(db *sql.DB, table *DBTable, prefix string, auto_increment int) erro
 	return nil
 }
 
+type DBQueryer interface {
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+func DBQuery(db DBQueryer, table *DBTable, prefix string, sql string, args ...interface{}) (*sql.Rows, error) {
+	var tbname = prefix + table.Name
+	return db.Query(fmt.Sprintf("SELECT * FROM %s %s", tbname, sql), args...)
+}
+
 func DBUpdate(db *sql.DB, table *DBTable, prefix string, object interface{}) (sql.Result, error) {
 
 	var tbname = prefix + table.Name
@@ -224,9 +235,10 @@ func DBUpdate(db *sql.DB, table *DBTable, prefix string, object interface{}) (sq
 
 	s.WriteString(fmt.Sprintf("UPDATE %s SET ", tbname))
 
-	var tb = reflect.TypeOf(object)
-	var tbv = reflect.ValueOf(object)
+	var tbv = reflect.ValueOf(object).Elem()
+	var tb = tbv.Type()
 	var fc = tb.NumField()
+
 	for i := 0; i < fc; i += 1 {
 		var fd = tb.Field(i)
 		var fbv = tbv.Field(i)
@@ -254,7 +266,7 @@ func DBUpdate(db *sql.DB, table *DBTable, prefix string, object interface{}) (sq
 
 	log.Printf("%s %s\n", s.String(), fs)
 
-	return db.Exec(s.String(), fs[:n])
+	return db.Exec(s.String(), fs[:n]...)
 }
 
 func DBInsert(db *sql.DB, table *DBTable, prefix string, object interface{}) (sql.Result, error) {

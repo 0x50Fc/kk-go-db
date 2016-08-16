@@ -1,9 +1,9 @@
 package main
 
 import (
-	"./kk"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hailongz/kk-go-db/kk"
 	"log"
 )
 
